@@ -1,0 +1,119 @@
+---
+:ssh_config: &ssh_config
+  :type: inline
+  :vars:
+    -
+     :ssh_pub_key: <% = File.readlines("#{Dir.home}/.ssh/vagrant_id_rsa.pub").first.strip %>
+  :script: |
+    <<-SHELL
+      echo #{ssh_pub_key} >> /home/vagrant/.ssh/authorized_keys
+    SHELL
+
+:login_as_deploy: &login_as_deploy
+  :type: inline
+  :script: |
+    <<-EOF
+      if [ ! -f /home/vagrant/.login_as_deploy ] && id -u "deploy" >/dev/null 2>&1; then
+        echo '
+          setfacl -m deploy:x $(dirname "$SSH_AUTH_SOCK")
+          setfacl -m deploy:rwx "$SSH_AUTH_SOCK"
+          sudo -E su deploy
+        ' > /home/vagrant/.login_as_deploy
+        chown vagrant:vagrant /home/vagrant/.login_as_deploy
+        echo "source .login_as_deploy" >> /home/vagrant/.bash_profile
+      fi
+    EOF
+
+:puppet_install_centos: &puppet_install_centos
+  :type: inline
+  :script: |
+    if which puppet > /dev/null 2>&1; then
+      echo 'Puppet Installed.'
+    else
+      echo 'Puppet Installation Script' &&\
+      grep -q 'rvm use system' /root/.bashrc || echo 'rvm use system 2>/dev/null' >> /root/.bashrc && \
+      rpm -i -v -h --replacepkgs --quiet http://yum.puppetlabs.com/puppetlabs-release-el-$( rpm -q --qf "%{VERSION}" $(rpm -q --whatprovides redhat-release ) ).noarch.rpm && \
+      yum install -y -q puppet-3.8.7
+    fi
+
+:puppet_install_ubuntu: &puppet_install_ubuntu #LTS versions pre-16.04
+  :type: inline
+  :script: |
+    if which puppet > /dev/null 2>&1; then
+      echo 'Puppet Installed.'
+    else
+      wget "https://apt.puppetlabs.com/puppetlabs-release-`$(lsb_release -c|awk '{print $2}')`.deb" && \
+      dpkg -i puppetlabs-release-`$(lsb_release -c|awk '{print $2}')`.deb && \
+      apt-get update
+      apt-get install -y puppet
+
+:puppet_install_xenial: &puppet_install_xenial
+  :type: inline
+  :script: |
+    if which puppet > /dev/null 2>&1; then
+      echo 'Puppet Installed.'
+    else
+      curl -O https://apt.puppetlabs.com/puppetlabs-release-pc1-$(lsb_release -c|awk '{print $2}').deb && \
+      dpkg -i puppetlabs-release-pc1-$(lsb_release -c|awk '{print $2}').deb && \
+      apt-get update
+      apt-get install -y puppet
+
+:puppet: &puppet
+  :type: puppet
+  :puppet_facters:
+    :organization: devop-co
+    :client: devop-co
+    :env: development
+    :role: web
+    :sub_role: db
+    :puppet_environment: development
+  :puppet_paths:
+    :modules_dir: "../platform-puppet/modules"
+    :manifests_path: "../platform-puppet/manifests"
+    :manifest_file: "site.pp"
+    :hiera_config_file: "../platform-configs/hiera.yaml"
+
+:provisors: &provisors
+  :provisioners:
+    -
+      <<: *puppet_install_centos
+    -
+      <<: *puppet
+
+:vm_defaults: &vm_defaults
+  :sync_rvm: true
+  :sync_apps: false
+  :box: "devopco/centos-7-2-min"
+  :ram: 1024
+  :cpus: 1
+  :forward_agent: false
+  :auto_nat_dns_proxy: false
+  :natdnshostresolver1: "on"
+  :natdnsproxy1: "on"
+:servers:
+  -
+    <<: *vm_defaults
+    :name: "redmine"
+    :hostname: "redmine.devopco.lcl"
+    <<: *provisors
+  -
+    <<: *vm_defaults
+    :name: "gitlab"
+    :hostname: "gitlab.devopco.lcl"
+    <<: *provisors
+  -
+    <<: *vm_defaults
+    :name: "ldap"
+    :hostname: "ldap.devopco.lcl"
+    <<: *provisors
+
+# Example Configurations
+  # -
+  #   <<: *vm_defaults
+  #   :name: "web02"
+  #   :hostname: "web02.devopco.lcl"
+  #   :ip: "192.168.0.11"
+  #   :sync_apps: true
+  #   :apps:
+  #     - directory_name
+  #   <<: *provisioners
