@@ -68,10 +68,10 @@
     :sub_role: db
     :puppet_environment: development
   :puppet_paths:
-    :modules_dir: "../platform-puppet/modules"
-    :manifests_path: "../platform-puppet/manifests"
+    :modules_dir: "../org-puppet/modules"
+    :manifests_path: "../org-puppet/manifests"
     :manifest_file: "site.pp"
-    :hiera_config_file: "../platform-configs/hiera.yaml"
+    :hiera_config_file: "../org-hiera/hiera.yaml"
 
 :provisors: &provisors
   :provisioners:
